@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Engagement Time 测试2</title>
+
+    <!-- Google tag (gtag.js) - 全局 Debug 模式 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-PFRLSPSK3L"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        // 开启全局 Debug 模式，所有事件都会发送到 DebugView
+        gtag('config', 'G-PFRLSPSK3L', { 'debug_mode': true });
+    </script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 22px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            backdrop-filter: blur(10px);
+        }
+
+        .label {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-bottom: 4px;
+        }
+
+        .value {
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .status.visible {
+            background: #4ade80;
+            color: #000;
+        }
+
+        .status.hidden {
+            background: #f87171;
+            color: #fff;
+        }
+
+        .log {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 16px;
+            font-family: monospace;
+            font-size: 11px;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .log-item {
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-item:last-child {
+            border-bottom: none;
+        }
+
+        .time {
+            opacity: 0.6;
+        }
+
+        .firebase-tag {
+            background: #FFA000;
+            color: #000;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            margin-right: 4px;
+        }
+
+        .info-box {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 12px;
+            margin-top: 16px;
+        }
+
+        .info-box h3 {
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .info-box ul {
+            padding-left: 16px;
+        }
+
+        .info-box li {
+            margin: 4px 0;
+        }
+
+        .sdk-status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .sdk-status.loading {
+            background: #fbbf24;
+            color: #000;
+        }
+
+        .sdk-status.ready {
+            background: #4ade80;
+            color: #000;
+        }
+
+        .sdk-status.error {
+            background: #f87171;
+            color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>📊 Firebase Engagement 测试</h1>
+
+        <div class="card">
+            <div class="label">Firebase SDK 状态</div>
+            <span id="sdkStatus" class="sdk-status loading">加载中...</span>
+        </div>
+
+        <div class="card">
+            <div class="label">页面状态</div>
+            <span id="status" class="status visible">VISIBLE</span>
+        </div>
+
+        <div class="card">
+            <div class="label">累计可见时长（本地计算）</div>
+            <div class="value"><span id="engagementTime">0.0</span>s</div>
+        </div>
+
+        <div class="card">
+            <div class="label">visibility 变化次数</div>
+            <div class="value"><span id="changeCount">0</span></div>
+        </div>
+
+        <div class="card">
+            <div class="label">事件日志</div>
+            <div class="log" id="log"></div>
+        </div>
+
+        <div class="info-box">
+            <h3>📋 测试说明</h3>
+            <ul>
+                <li>在 Firebase Console → DebugView 实时查看事件</li>
+                <li><span class="firebase-tag">FB</span> 标记的是发送到 Firebase 的事件</li>
+                <li>测试步骤：打开页面 → 按 Home 键 → 页面恢复 → 查看日志</li>
+            </ul>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import Firebase SDK
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+        import { getAnalytics, logEvent, setAnalyticsCollectionEnabled } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-analytics.js";
+
+        // Firebase 配置
+        const firebaseConfig = {
+            apiKey: "AIzaSyAaX4978AFuTrPqOFUncHAjyA8N6GfqRgk",
+            authDomain: "testweb-5bcbf.firebaseapp.com",
+            projectId: "testweb-5bcbf",
+            storageBucket: "testweb-5bcbf.firebasestorage.app",
+            messagingSenderId: "15226321954",
+            appId: "1:15226321954:web:39c116ed64fd84fbb0de7b",
+            measurementId: "G-PFRLSPSK3L"
+        };
+
+        // 状态变量
+        let engagementTime = 0;
+        let lastVisibleTime = Date.now();
+        let isVisible = true;
+        let changeCount = 0;
+        let analytics = null;
+        const sessionId = 'test_' + Date.now();
+        const pageLoadTime = Date.now();
+
+        // 添加日志
+        function addLog(message, isFirebase = false) {
+            const log = document.getElementById('log');
+            const time = new Date().toLocaleTimeString('zh-CN', { hour12: false, fractionalSecondDigits: 3 });
+            const item = document.createElement('div');
+            item.className = 'log-item';
+            const fbTag = isFirebase ? '<span class="firebase-tag">FB</span>' : '';
+            item.innerHTML = `<span class="time">[${time}]</span> ${fbTag}${message}`;
+            log.insertBefore(item, log.firstChild);
+            console.log(`[EngagementTest] ${message}`);
+        }
+
+        // 发送 Firebase 事件
+        function sendFirebaseEvent(eventName, params = {}) {
+            if (!analytics) {
+                addLog(`⚠️ SDK 未就绪，无法发送: ${eventName}`);
+                return;
+            }
+            try {
+                const ua = navigator.userAgent;
+                const isWebView = ua.includes('wv') || ua.includes('WebView') ||
+                    (ua.includes('Android') && !ua.includes('Chrome'));
+
+                logEvent(analytics, eventName, {
+                    ...params,
+                    session_id: sessionId,
+                    page_time_ms: Date.now() - pageLoadTime,
+                    user_agent: ua.substring(0, 100),  // 截取前100字符，避免过长
+                    is_webview: isWebView,
+                    debug_mode: true
+                });
+                addLog(`✅ ${eventName}`, true);
+            } catch (e) {
+                addLog(`❌ 发送失败: ${e.message}`);
+            }
+        }
+
+        // 更新显示
+        function updateDisplay() {
+            if (isVisible) {
+                const now = Date.now();
+                const currentEngagement = engagementTime + (now - lastVisibleTime);
+                document.getElementById('engagementTime').textContent = (currentEngagement / 1000).toFixed(1);
+            }
+        }
+
+        // 初始化 Firebase
+        try {
+            const app = initializeApp(firebaseConfig);
+            analytics = getAnalytics(app);
+
+            // 开启调试模式（需要在 URL 中添加 ?debug 或使用 Chrome 扩展）
+            setAnalyticsCollectionEnabled(analytics, true);
+
+            document.getElementById('sdkStatus').textContent = '已就绪 ✓';
+            document.getElementById('sdkStatus').className = 'sdk-status ready';
+            addLog('🔥 Firebase SDK 初始化成功');
+
+            // 发送页面加载事件
+            sendFirebaseEvent('test_page_load', {
+                timestamp: Date.now()
+            });
+
+        } catch (e) {
+            document.getElementById('sdkStatus').textContent = '初始化失败';
+            document.getElementById('sdkStatus').className = 'sdk-status error';
+            addLog(`❌ Firebase 初始化失败: ${e.message}`);
+        }
+
+        // 监听 visibility 变化
+        document.addEventListener('visibilitychange', function () {
+            const now = Date.now();
+            changeCount++;
+            document.getElementById('changeCount').textContent = changeCount;
+
+            if (document.visibilityState === 'hidden') {
+                // 页面变为不可见
+                const visibleDuration = isVisible ? (now - lastVisibleTime) : 0;
+                if (isVisible) {
+                    engagementTime += visibleDuration;
+                    isVisible = false;
+                }
+
+                document.getElementById('status').textContent = 'HIDDEN';
+                document.getElementById('status').className = 'status hidden';
+                document.getElementById('engagementTime').textContent = (engagementTime / 1000).toFixed(1);
+
+                addLog(`🔴 HIDDEN - 本次 ${(visibleDuration / 1000).toFixed(2)}s, 累计 ${(engagementTime / 1000).toFixed(2)}s`);
+
+                // 发送事件到 Firebase
+                sendFirebaseEvent('visibility_hidden', {
+                    visible_duration_ms: Math.round(visibleDuration),
+                    total_engagement_ms: Math.round(engagementTime),
+                    change_count: changeCount
+                });
+
+            } else {
+                // 页面变为可见
+                lastVisibleTime = now;
+                isVisible = true;
+                document.getElementById('status').textContent = 'VISIBLE';
+                document.getElementById('status').className = 'status visible';
+
+                addLog(`🟢 VISIBLE - 恢复计时`);
+
+                // 发送事件到 Firebase
+                sendFirebaseEvent('visibility_visible', {
+                    total_engagement_ms: Math.round(engagementTime),
+                    change_count: changeCount
+                });
+            }
+        });
+
+        // 页面卸载时发送最终数据
+        window.addEventListener('pagehide', function () {
+            if (isVisible) {
+                engagementTime += (Date.now() - lastVisibleTime);
+            }
+            sendFirebaseEvent('page_unload', {
+                final_engagement_ms: Math.round(engagementTime),
+                change_count: changeCount
+            });
+        });
+
+        // 每 100ms 更新显示
+        setInterval(updateDisplay, 100);
+
+        // 初始日志
+        addLog('📱 页面已加载');
+        addLog(`📋 visibilityState: ${document.visibilityState}`);
+
+        // 环境诊断
+        const ua = navigator.userAgent;
+        const isWebView = ua.includes('wv') || ua.includes('WebView') ||
+            (ua.includes('Android') && !ua.includes('Chrome'));
+        addLog(`📱 环境: ${isWebView ? 'WebView' : '浏览器'}`);
+        addLog(`🍪 Cookie 启用: ${navigator.cookieEnabled}`);
+        addLog(`💾 localStorage: ${typeof localStorage !== 'undefined' ? '可用' : '不可用'}`);
+
+        // 检查 gtag 是否可用
+        setTimeout(() => {
+            if (typeof gtag === 'function') {
+                addLog('✅ gtag 函数可用');
+            } else {
+                addLog('❌ gtag 函数不可用！可能被 WebView 阻止');
+            }
+
+            // 检查 dataLayer
+            if (window.dataLayer && window.dataLayer.length > 0) {
+                addLog(`✅ dataLayer 有 ${window.dataLayer.length} 条数据`);
+            } else {
+                addLog('⚠️ dataLayer 为空或不存在');
+            }
+        }, 2000);
+    </script>
+
+</body>
+
+</html>
