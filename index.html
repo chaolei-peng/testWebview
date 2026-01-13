@@ -376,6 +376,98 @@
         }, 2000);
     </script>
 
+
+    <!-- 页面可见性监控：每秒打印页面状态/累计可见时长（用于 WebView + Logcat 排查） -->
+    <script>
+        (function () {
+            var TAG = "[PAGE_VIS]";
+            var startPerf = (window.performance && performance.now) ? performance.now() : Date.now();
+            var visible = false;
+            var lastVisibleStart = null;
+            var totalVisibleMs = 0;
+            var tick = 0;
+
+            function nowPerf() {
+                return (window.performance && performance.now) ? performance.now() : Date.now();
+            }
+
+            // “可见”定义：document 可见 + 页面有焦点（在 WebView 里更贴近用户真实可见）
+            function isVisibleNow() {
+                var visibilityOk = (typeof document.visibilityState === "string")
+                    ? (document.visibilityState === "visible")
+                    : (!document.hidden);
+
+                var focusOk = (typeof document.hasFocus === "function") ? document.hasFocus() : true;
+
+                return visibilityOk && focusOk;
+            }
+
+            function flushVisibilityChange(reason) {
+                var t = nowPerf();
+                var v = isVisibleNow();
+
+                if (v && !visible) {
+                    visible = true;
+                    lastVisibleStart = t;
+                    console.log(TAG + " state -> VISIBLE (" + reason + ")");
+                } else if (!v && visible) {
+                    visible = false;
+                    if (lastVisibleStart != null) {
+                        totalVisibleMs += (t - lastVisibleStart);
+                    }
+                    lastVisibleStart = null;
+                    console.log(TAG + " state -> NOT_VISIBLE (" + reason + ")");
+                }
+            }
+
+            function getTotalVisibleMs() {
+                var t = nowPerf();
+                var live = (visible && lastVisibleStart != null) ? (t - lastVisibleStart) : 0;
+                return totalVisibleMs + live;
+            }
+
+            // 监听所有可能影响可见性的事件
+            var events = ["visibilitychange", "focus", "blur", "pageshow", "pagehide"];
+            events.forEach(function (ev) {
+                window.addEventListener(ev, function () {
+                    flushVisibilityChange(ev);
+                }, true);
+            });
+
+            // 某些内核支持 freeze/resume（可选）
+            try {
+                window.addEventListener("freeze", function () { flushVisibilityChange("freeze"); }, true);
+                window.addEventListener("resume", function () { flushVisibilityChange("resume"); }, true);
+            } catch (e) { /* ignore */ }
+
+            // 初始化一次
+            flushVisibilityChange("init");
+
+            // 每秒打印一次状态
+            setInterval(function () {
+                tick++;
+                var t = nowPerf();
+                var elapsedMs = t - startPerf;
+                var visMs = getTotalVisibleMs();
+
+                var payload = {
+                    tick: tick,
+                    ts: Date.now(),
+                    pageState: visible ? "VISIBLE" : "NOT_VISIBLE",
+                    visibilityState: document.visibilityState,
+                    hidden: document.hidden,
+                    hasFocus: (typeof document.hasFocus === "function") ? document.hasFocus() : null,
+                    elapsedMs: Math.round(elapsedMs),
+                    visibleTotalMs: Math.round(visMs),
+                    visibleTotalSec: +(visMs / 1000).toFixed(3)
+                };
+
+                // Android Studio / Logcat：确保 WebView 设置了 WebChromeClient 才能看到 console.log
+                console.log(TAG, JSON.stringify(payload));
+            }, 1000);
+        })();
+    </script>
+
 </body>
 
 </html>
